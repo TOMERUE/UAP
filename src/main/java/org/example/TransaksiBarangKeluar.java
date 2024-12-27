@@ -5,15 +5,21 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.sql.*;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 
 public class TransaksiBarangKeluar extends JFrame {
     private JTextField inputKodeBarang, inputJumlah;
-    private JComboBox<String> comboSupplier;
     private JTable table;
     private DefaultTableModel tableModel;
     private JLabel labelTanggalValue;
+    private JFrame frame;
+
+    // Database connection details
+    private static final String DB_URL = "jdbc:mysql://localhost:3306/penyimpananbarang";
+    private static final String DB_USER = "root";
+    private static final String DB_PASSWORD = "";
 
     public TransaksiBarangKeluar() {
         setTitle("Inventori Barang :: Transaksi Barang Keluar");
@@ -28,6 +34,7 @@ public class TransaksiBarangKeluar extends JFrame {
         setLayout(null);
 
         // Nama Petugas
+        JFrame frame = new JFrame("Barang Keluar");
         JLabel labelPetugas = new JLabel("Nama Petugas:");
         labelPetugas.setBounds(20, 20, 100, 25);
         add(labelPetugas);
@@ -46,15 +53,6 @@ public class TransaksiBarangKeluar extends JFrame {
         labelTanggalValue = new JLabel(currentDate);
         labelTanggalValue.setBounds(420, 20, 200, 25);
         add(labelTanggalValue);
-
-        // Nama Supplier
-        JLabel labelSupplier = new JLabel("Nama Supplier:");
-        labelSupplier.setBounds(20, 60, 100, 25);
-        add(labelSupplier);
-
-        comboSupplier = new JComboBox<>(new String[]{"Pilih", "Supplier A", "Supplier B", "Supplier C"});
-        comboSupplier.setBounds(120, 60, 200, 25);
-        add(comboSupplier);
 
         // Tabel Barang
         tableModel = new DefaultTableModel(new Object[]{"ID", "Kode", "Nama Barang", "Jumlah"}, 0);
@@ -121,14 +119,23 @@ public class TransaksiBarangKeluar extends JFrame {
         });
         add(btnSimpan);
 
-        // Tombol Kembali
+        JButton btnLoadBarang = new JButton("Load Data Barang");
+        btnLoadBarang.setBounds(20, 60, 150, 25);
+        btnLoadBarang.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                loadBarangFromDatabase();
+            }
+        });
+        add(btnLoadBarang);
+
         JButton btnKembali = new JButton("Kembali");
-        btnKembali.setBounds(550, 20, 80, 25);
+        btnKembali.setBounds(550, 20, 100, 25);
         btnKembali.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                dispose(); // Menutup halaman ini
-                dashboard.main(null); // Membuka halaman dashboard
+                dispose();
+                dashboard.main(null); // Kembali ke halaman login
             }
         });
         add(btnKembali);
@@ -166,4 +173,27 @@ public class TransaksiBarangKeluar extends JFrame {
     private void simpanTransaksi() {
         JOptionPane.showMessageDialog(this, "Transaksi berhasil disimpan!", "Informasi", JOptionPane.INFORMATION_MESSAGE);
     }
+
+    private void loadBarangFromDatabase() {
+        try (Connection connection = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery("SELECT * FROM barang")) {
+
+            tableModel.setRowCount(0); // Clear existing data
+
+            while (resultSet.next()) {
+                int id = resultSet.getInt("id_barang");
+                String kode = resultSet.getString("kode_barang");
+                String nama = resultSet.getString("nama_barang");
+                int jumlah = resultSet.getInt("stok");
+                tableModel.addRow(new Object[]{id, kode, nama, jumlah});
+            }
+
+            JOptionPane.showMessageDialog(this, "Data barang berhasil dimuat!", "Informasi", JOptionPane.INFORMATION_MESSAGE);
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Gagal memuat data barang: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+
 }

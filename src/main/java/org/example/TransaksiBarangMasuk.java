@@ -2,9 +2,9 @@ package org.example;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
-import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.sql.*;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 
@@ -14,6 +14,11 @@ public class TransaksiBarangMasuk extends JFrame {
     private JTable table;
     private DefaultTableModel tableModel;
     private JLabel labelTanggalValue;
+    private JFrame frame;
+
+    private static final String DB_URL = "jdbc:mysql://localhost:3306/penyimpananbarang";
+    private static final String DB_USER = "root";
+    private static final String DB_PASSWORD = "";
 
     public TransaksiBarangMasuk() {
         setTitle("Inventori Barang :: Transaksi Barang Masuk");
@@ -22,29 +27,21 @@ public class TransaksiBarangMasuk extends JFrame {
         setLocationRelativeTo(null);
 
         initUI();
+        loadSuppliers();
     }
 
     private void initUI() {
         setLayout(null);
 
-        // Nama Petugas
-        JLabel labelPetugas = new JLabel("Nama Petugas:");
-        labelPetugas.setBounds(20, 20, 100, 25);
-        add(labelPetugas);
-
-        JTextField inputPetugas = new JTextField();
-        inputPetugas.setBounds(120, 20, 200, 25);
-        add(inputPetugas);
-
-        // Tanggal
+        // Tanggal otomatis dari perangkat
+        JFrame frame = new JFrame("Barang Masuk");
         JLabel labelTanggal = new JLabel("Tanggal:");
-        labelTanggal.setBounds(350, 20, 100, 25);
+        labelTanggal.setBounds(20, 20, 100, 25);
         add(labelTanggal);
 
-        // Tanggal otomatis dari perangkat
         String currentDate = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         labelTanggalValue = new JLabel(currentDate);
-        labelTanggalValue.setBounds(420, 20, 200, 25);
+        labelTanggalValue.setBounds(100, 20, 200, 25);
         add(labelTanggalValue);
 
         // Nama Supplier
@@ -52,7 +49,7 @@ public class TransaksiBarangMasuk extends JFrame {
         labelSupplier.setBounds(20, 60, 100, 25);
         add(labelSupplier);
 
-        comboSupplier = new JComboBox<>(new String[]{"Pilih", "Supplier A", "Supplier B", "Supplier C"});
+        comboSupplier = new JComboBox<>(new String[]{"Pilih"});
         comboSupplier.setBounds(120, 60, 200, 25);
         add(comboSupplier);
 
@@ -80,8 +77,8 @@ public class TransaksiBarangMasuk extends JFrame {
         inputJumlah.setBounds(420, 320, 100, 25);
         add(inputJumlah);
 
-        JButton btnTambah = new JButton("OK");
-        btnTambah.setBounds(550, 320, 80, 25);
+        JButton btnTambah = new JButton("Tambah");
+        btnTambah.setBounds(550, 320, 100, 25);
         btnTambah.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -121,17 +118,32 @@ public class TransaksiBarangMasuk extends JFrame {
         });
         add(btnSimpan);
 
-        // Tombol Kembali
         JButton btnKembali = new JButton("Kembali");
-        btnKembali.setBounds(550, 20, 80, 25);
+
+        btnKembali.setBounds(550, 20, 100, 25);
         btnKembali.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                dispose(); // Menutup halaman ini
-                dashboard.main(null); // Membuka halaman dashboard
+                dispose();
+                dashboard.main(null); // Kembali ke halaman login
             }
         });
+        frame.setVisible(true);
+
         add(btnKembali);
+    }
+
+    private void loadSuppliers() {
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT nama_supplier FROM supplier")) {
+
+            while (rs.next()) {
+                comboSupplier.addItem(rs.getString("nama_supplier"));
+            }
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Error loading suppliers: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     private void tambahBarang() {
@@ -139,12 +151,27 @@ public class TransaksiBarangMasuk extends JFrame {
         String jumlah = inputJumlah.getText();
 
         if (!kodeBarang.isEmpty() && !jumlah.isEmpty()) {
-            int rowCount = tableModel.getRowCount();
-            tableModel.addRow(new Object[]{rowCount + 1, kodeBarang, "Nama Barang", jumlah});
+            try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+                 PreparedStatement ps = conn.prepareStatement("SELECT nama_barang FROM barang WHERE kode_barang = ?")) {
 
-            // Clear input fields
-            inputKodeBarang.setText("");
-            inputJumlah.setText("");
+                ps.setString(1, kodeBarang);
+                ResultSet rs = ps.executeQuery();
+
+                if (rs.next()) {
+                    String namaBarang = rs.getString("nama_barang");
+                    int rowCount = tableModel.getRowCount();
+                    tableModel.addRow(new Object[]{rowCount + 1, kodeBarang, namaBarang, jumlah});
+
+                    // Clear input fields
+                    inputKodeBarang.setText("");
+                    inputJumlah.setText("");
+                } else {
+                    JOptionPane.showMessageDialog(this, "Kode Barang tidak ditemukan!", "Error", JOptionPane.ERROR_MESSAGE);
+                }
+
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(this, "Error adding item: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
         } else {
             JOptionPane.showMessageDialog(this, "Kode Barang dan Jumlah harus diisi!", "Error", JOptionPane.ERROR_MESSAGE);
         }
@@ -164,6 +191,47 @@ public class TransaksiBarangMasuk extends JFrame {
     }
 
     private void simpanTransaksi() {
-        JOptionPane.showMessageDialog(this, "Transaksi berhasil disimpan!", "Informasi", JOptionPane.INFORMATION_MESSAGE);
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD)) {
+            String tanggal = labelTanggalValue.getText();
+
+            conn.setAutoCommit(false);
+
+            String insertTransaksiSQL = "INSERT INTO transaksi_masuk (tanggal) VALUES (?)";
+            try (PreparedStatement psTransaksi = conn.prepareStatement(insertTransaksiSQL, Statement.RETURN_GENERATED_KEYS)) {
+                psTransaksi.setString(1, tanggal);
+                psTransaksi.executeUpdate();
+
+                ResultSet generatedKeys = psTransaksi.getGeneratedKeys();
+                if (generatedKeys.next()) {
+                    int transaksiId = generatedKeys.getInt(1);
+
+                    String insertDetailSQL = "INSERT INTO transaksi_masuk (id_transaksi, kode_barang, jumlah) VALUES (?, ?, ?)";
+                    try (PreparedStatement psDetail = conn.prepareStatement(insertDetailSQL)) {
+                        for (int i = 0; i < tableModel.getRowCount(); i++) {
+                            psDetail.setInt(1, transaksiId);
+                            psDetail.setString(2, (String) tableModel.getValueAt(i, 1));
+                            psDetail.setInt(3, Integer.parseInt((String) tableModel.getValueAt(i, 3)));
+                            psDetail.addBatch();
+                        }
+                        psDetail.executeBatch();
+                    }
+
+                    conn.commit();
+                    JOptionPane.showMessageDialog(this, "Transaksi berhasil disimpan!", "Informasi", JOptionPane.INFORMATION_MESSAGE);
+                    hapusSemua();
+                } else {
+                    throw new SQLException("Failed to retrieve transaction ID.");
+                }
+            } catch (SQLException ex) {
+                conn.rollback();
+                throw ex;
+            }
+
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "Error saving transaction: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
     }
+
+
+
 }
